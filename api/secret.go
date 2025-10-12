@@ -18,7 +18,7 @@ func SecretCreate(c *gin.Context) {
 	if err := c.BindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
-			"message": "Failed to decode JSON",
+			"message": "Missing required parameter: name, value and environment",
 		})
 		return
 	}
@@ -102,7 +102,7 @@ func SecretUpdate(c *gin.Context) {
 	if err := c.BindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
-			"message": "Failed to decode JSON",
+			"message": "Missing required parameter: id and value",
 		})
 		return
 	}
@@ -164,6 +164,14 @@ func SecretUpdate(c *gin.Context) {
 func SecretGet(c *gin.Context) {
 	secretID := c.Query("secretId")
 
+	if secretID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "fail",
+			"message": "Missing required parameter: secretId",
+		})
+		return
+	}
+
 	db, err := sqlquery.GetSqlInstance()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -218,7 +226,7 @@ func SecretDelete(c *gin.Context) {
 	if err := c.BindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
-			"message": "Failed to decode JSON",
+			"message": "Missing required parameter: id",
 		})
 		return
 	}
@@ -287,7 +295,16 @@ func SecretDelete(c *gin.Context) {
 }
 
 func GetAllSecretByProjectUid(c *gin.Context) {
-	projectUid := c.Param("projectuid")
+	projectUid := c.Query("projectuid")
+	environment := c.Query("environment")
+
+	if projectUid == "" || environment == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "fail",
+			"message": "Missing required parameter: projectuid and environment",
+		})
+		return
+	}
 
 	var secretList []interfaces.SecretResponse
 
@@ -301,7 +318,7 @@ func GetAllSecretByProjectUid(c *gin.Context) {
 	}
 	defer db.Close()
 
-	rows, err := db.Query(sqlquery.GetAllSecretByProjectUidQuery, projectUid)
+	rows, err := db.Query(sqlquery.GetAllSecretByProjectUidQuery, projectUid, environment)
 
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{

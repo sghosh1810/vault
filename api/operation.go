@@ -15,7 +15,7 @@ func MapSecretToProject(c *gin.Context) {
 	if err := c.BindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
-			"message": "Failed to decode JSON",
+			"message": "Missing required parameter: project_id and secret_id",
 		})
 		return
 	}

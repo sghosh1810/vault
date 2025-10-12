@@ -53,7 +53,7 @@ func main() {
 	anonGroup := router.Group(apiBasePath, middleware.CheckIP)
 
 	//route to get project specific data
-	anonGroup.GET("/secret/list/:projectuid", api.GetAllSecretByProjectUid)
+	anonGroup.GET("/secret/list", api.GetAllSecretByProjectUid)
 
 	router.Run()
 }

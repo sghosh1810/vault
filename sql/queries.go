@@ -57,7 +57,7 @@ const (
 		JOIN secret_version sv on sv.secret_id = s.id
 		JOIN secret_project_map sp on sp.secret_id = s.id
 		JOIN project p on p.id = sp.project_id
-		WHERE p.uid = ?
+		WHERE p.uid = ? AND sv.environment = ?
 		ORDER BY sv.id DESC 
 		LIMIT 1
 	`

@@ -18,7 +18,7 @@ func ProjectCreate(c *gin.Context) {
 	if err := c.BindJSON(&newProjectsCreatePayload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
-			"message": "Failed to decode json.",
+			"message": "Missing required parameter: name",
 		})
 		return
 	}
@@ -65,7 +65,7 @@ func ProjectUpdate(c *gin.Context) {
 	if err := c.BindJSON(&newProjectsUpdatePayload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
-			"message": "Failed to decode json.",
+			"message": "Missing required parameter: name and id",
 		})
 		return
 	}
@@ -108,6 +108,14 @@ func ProjectUpdate(c *gin.Context) {
 
 func ProjectGet(c *gin.Context) {
 	projectId := c.Query("projectId")
+
+	if projectId == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "fail",
+			"message": "Missing required parameter: projectId",
+		})
+		return
+	}
 
 	var projectDetails []map[string]any
 
@@ -171,7 +179,7 @@ func ProjectDelete(c *gin.Context) {
 	if err := c.BindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
-			"message": "Failed to decode JSON",
+			"message": "Missing required parameter: id",
 		})
 		return
 	}
