@@ -1,8 +1,14 @@
-module shounak.me/configmanager
+module cozeva.com/vault
 
 go 1.24.5
 
 require github.com/gin-gonic/gin v1.11.0
+
+require (
+	github.com/ArthurHlt/go-eureka-client v1.1.0 // indirect
+	github.com/konsorten/go-windows-terminal-sequences v1.0.1 // indirect
+	github.com/sirupsen/logrus v1.4.2 // indirect
+)
 
 require (
 	github.com/bytedance/sonic v1.14.0 // indirect

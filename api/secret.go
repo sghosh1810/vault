@@ -6,10 +6,12 @@ import (
 	"log"
 	"net/http"
 
+	"cozeva.com/vault/interfaces"
+	"cozeva.com/vault/pkg/access"
+	"cozeva.com/vault/pkg/security"
+	"cozeva.com/vault/pkg/user"
+	sqlquery "cozeva.com/vault/sql"
 	"github.com/gin-gonic/gin"
-	"shounak.me/configmanager/interfaces"
-	"shounak.me/configmanager/pkg/security"
-	sqlquery "shounak.me/configmanager/sql"
 )
 
 func SecretCreate(c *gin.Context) {
@@ -27,6 +29,16 @@ func SecretCreate(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
 			"message": "Secret name, value and environment are required",
+		})
+		return
+	}
+
+	currentUser, err := user.GetCurrentUser(c)
+
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "fail",
+			"message": "Failed to parse current user info.",
 		})
 		return
 	}
@@ -53,14 +65,13 @@ func SecretCreate(c *gin.Context) {
 	res, err := tx.Exec(sqlquery.SecretInsertQuery, payload.SecretName)
 	if err != nil {
 		tx.Rollback()
-		fmt.Println(err)
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
 			"message": "Failed to insert secret metadata",
 		})
 		return
 	}
-	secretID, _ := res.LastInsertId()
+	secretId, _ := res.LastInsertId()
 
 	encryptedData, err := security.EncryptSecret(payload.SecretValue)
 	if err != nil {
@@ -72,12 +83,23 @@ func SecretCreate(c *gin.Context) {
 		return
 	}
 
-	_, err = tx.Exec(sqlquery.SecretVersionInsertQuery, secretID, 1, encryptedData, payload.SecretEnvironment)
+	_, err = tx.Exec(sqlquery.SecretVersionInsertQuery, secretId, 1, encryptedData, payload.SecretEnvironment)
 	if err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
 			"message": "Failed to insert secret version",
+		})
+		return
+	}
+
+	_, err = tx.Exec(sqlquery.InsertUserSecretAccessQuery, currentUser.Uid, secretId, 1, 1, 1)
+
+	if err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "fail",
+			"message": "Failed to create new secret with name " + payload.SecretName,
 		})
 		return
 	}
@@ -93,11 +115,22 @@ func SecretCreate(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{
 		"status":  "success",
 		"message": fmt.Sprintf("Created secret %s with version 1", payload.SecretName),
+		"id":      secretId,
 	})
 }
 
 func SecretUpdate(c *gin.Context) {
 	var payload interfaces.SecretUpdatePayload
+
+	currentUser, err := user.GetCurrentUser(c)
+
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "fail",
+			"message": "Failed to parse current user info.",
+		})
+		return
+	}
 
 	if err := c.BindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -111,6 +144,16 @@ func SecretUpdate(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
 			"message": "Secret ID and value are required",
+		})
+		return
+	}
+
+	projectAccess, err := access.GetAccessForSecret(payload.SecretID, currentUser.Uid)
+
+	if err != nil || !projectAccess.HasWriteAccess {
+		c.JSON(http.StatusForbidden, gin.H{
+			"status":  "fail",
+			"message": "Access denied to this resource",
 		})
 		return
 	}
@@ -162,12 +205,31 @@ func SecretUpdate(c *gin.Context) {
 }
 
 func SecretGet(c *gin.Context) {
-	secretID := c.Query("secretId")
+	secretId := c.Query("secretId")
+	currentUser, err := user.GetCurrentUser(c)
 
-	if secretID == "" {
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "fail",
+			"message": "Failed to parse current user info.",
+		})
+		return
+	}
+
+	if secretId == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
 			"message": "Missing required parameter: secretId",
+		})
+		return
+	}
+
+	projectAccess, err := access.GetAccessForSecret(secretId, currentUser.Uid)
+
+	if err != nil || !projectAccess.HasReadAccess {
+		c.JSON(http.StatusForbidden, gin.H{
+			"status":  "fail",
+			"message": "Access denied to this resource",
 		})
 		return
 	}
@@ -182,7 +244,7 @@ func SecretGet(c *gin.Context) {
 	}
 	defer db.Close()
 
-	rows, err := db.Query(sqlquery.SecretGetLatestValueQuery, secretID)
+	rows, err := db.Query(sqlquery.SecretGetLatestValueQuery, secretId)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
@@ -223,6 +285,16 @@ func SecretGet(c *gin.Context) {
 func SecretDelete(c *gin.Context) {
 	var payload interfaces.SecretDeletePayload
 
+	currentUser, err := user.GetCurrentUser(c)
+
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "fail",
+			"message": "Failed to parse current user info.",
+		})
+		return
+	}
+
 	if err := c.BindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
@@ -235,6 +307,16 @@ func SecretDelete(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
 			"message": "Missing required parameter: id",
+		})
+		return
+	}
+
+	projectAccess, err := access.GetAccessForSecret(payload.SecretID, currentUser.Uid)
+
+	if err != nil || !projectAccess.HasDeleteAccess {
+		c.JSON(http.StatusForbidden, gin.H{
+			"status":  "fail",
+			"message": "Access denied to this resource",
 		})
 		return
 	}
@@ -294,7 +376,7 @@ func SecretDelete(c *gin.Context) {
 	})
 }
 
-func GetAllSecretByProjectUid(c *gin.Context) {
+func ListSecretByProjectUid(c *gin.Context) {
 	projectUid := c.Query("projectuid")
 	environment := c.Query("environment")
 
@@ -362,4 +444,55 @@ func GetAllSecretByProjectUid(c *gin.Context) {
 		"data":   secretList,
 	})
 
+}
+
+func ListSecretByUser(c *gin.Context) {
+	currentUser, err := user.GetCurrentUser(c)
+
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "fail",
+			"message": "Failed to parse current user info.",
+		})
+		return
+	}
+
+	var secretList []any
+
+	db, err := sqlquery.GetSqlInstance()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "fail",
+			"message": "Failed to connect to db.",
+		})
+		return
+	}
+	defer db.Close()
+
+	rows, err := db.Query(sqlquery.ListAllSecretByUser, currentUser.Uid)
+
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "fail",
+			"message": "Failed to fetch secret list.",
+		})
+		return
+	}
+
+	for rows.Next() {
+		var id int
+		var name string
+		if err := rows.Scan(&id, &name); err != nil {
+			log.Fatal(err)
+		}
+		secretList = append(secretList, map[string]any{
+			"id":   id,
+			"name": name,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status": "success",
+		"data":   secretList,
+	})
 }

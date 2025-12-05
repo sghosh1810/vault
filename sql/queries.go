@@ -16,6 +16,22 @@ const (
 	DeleteProjectFromProjectTable = `
 		DELETE FROM project WHERE id = ?
 	`
+	InsertUserProjectAccessQuery = `
+		INSERT INTO user_project_access (
+			user_id,
+			project_id,
+			has_write_access,
+			has_share_access,
+			has_delete_access
+		) VALUES (?, ?, ?, ?, ?);
+	`
+	ListAllProjectByUser = `
+		SELECT p.id,p.name
+		FROM project p
+		JOIN user_project_access upa
+		ON p.id = upa.project_id
+		WHERE upa.user_id = ?
+	`
 )
 
 const (
@@ -48,6 +64,22 @@ const (
 	DeleteSecretFromSecretTable = `
 		DELETE FROM secret WHERE id = ?
 	`
+	InsertUserSecretAccessQuery = `
+		INSERT INTO user_secret_access (
+			user_id,
+			secret_id,
+			has_write_access,
+			has_share_access,
+			has_delete_access
+		) VALUES (?, ?, ?, ?, ?);
+	`
+	ListAllSecretByUser = `
+		SELECT s.id,s.name
+		FROM secret s
+		JOIN user_secret_access usa
+		ON s.id = usa.secret_id
+		WHERE usa.user_id = ?
+	`
 )
 
 const (
@@ -59,12 +91,24 @@ const (
 		JOIN project p on p.id = sp.project_id
 		WHERE p.uid = ? AND sv.environment = ?
 		ORDER BY sv.id DESC 
-		LIMIT 1
 	`
 )
 
 const (
 	MapSecretToProject = `
 		INSERT INTO secret_project_map (project_id,secret_id) VALUES (?, ?)
+	`
+)
+
+const (
+	CheckUserProjectAccessQuery = `
+		SELECT has_read_access, has_write_access, has_share_access, has_delete_access
+		FROM user_project_access
+		WHERE user_id = ? AND project_id = ?;
+	`
+	CheckUserSecretAccessQuery = `
+		SELECT has_read_access, has_write_access, has_share_access, has_delete_access
+		FROM user_secret_access
+		WHERE user_id = ? AND secret_id = ?;
 	`
 )

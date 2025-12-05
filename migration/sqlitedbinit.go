@@ -3,7 +3,7 @@ package migration
 import (
 	"log"
 
-	sqlengine "shounak.me/configmanager/sql"
+	sqlengine "cozeva.com/vault/sql"
 )
 
 func InitSqliteDB() {

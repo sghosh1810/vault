@@ -1,7 +1,6 @@
 package validation
 
 import (
-	"fmt"
 	"net"
 	"strings"
 )
@@ -10,7 +9,6 @@ func IsIPInRange(ipStr, cidrStr string) any {
 	ipStr = normalizeIP(ipStr)
 	ip := net.ParseIP(ipStr)
 
-	fmt.Println(ipStr, cidrStr)
 	if ip == nil {
 		return map[string]string{
 			"status":  "fail",

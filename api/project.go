@@ -5,15 +5,27 @@ import (
 	"log"
 	"net/http"
 
+	"cozeva.com/vault/interfaces"
+	"cozeva.com/vault/pkg/access"
+	"cozeva.com/vault/pkg/user"
+	sqlquery "cozeva.com/vault/sql"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
-	"shounak.me/configmanager/interfaces"
-	sqlquery "shounak.me/configmanager/sql"
 )
 
 func ProjectCreate(c *gin.Context) {
 	var newProjectsCreatePayload interfaces.ProjectsCreatePayload
+
+	currentUser, err := user.GetCurrentUser(c)
+
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "fail",
+			"message": "Failed to parse current user info.",
+		})
+		return
+	}
 
 	if err := c.BindJSON(&newProjectsCreatePayload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -41,10 +53,19 @@ func ProjectCreate(c *gin.Context) {
 	}
 	defer db.Close()
 
-	_, err = db.Exec(sqlquery.ProjectInsertQuery, newProjectsCreatePayload.ProjectDisplayName, uuid.NewString())
+	tx, err := db.Begin()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status":  "fail",
+			"message": "Failed to start transaction",
+		})
+		return
+	}
+
+	result, err := tx.Exec(sqlquery.ProjectInsertQuery, newProjectsCreatePayload.ProjectDisplayName, uuid.NewString())
 
 	if err != nil {
-		fmt.Println(err)
+		tx.Rollback()
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
 			"message": "Failed to create new project with name " + newProjectsCreatePayload.ProjectDisplayName,
@@ -52,15 +73,47 @@ func ProjectCreate(c *gin.Context) {
 		return
 	}
 
+	projectId, _ := result.LastInsertId()
+
+	_, err = tx.Exec(sqlquery.InsertUserProjectAccessQuery, currentUser.Uid, projectId, 1, 1, 1)
+
+	if err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "fail",
+			"message": "Failed to create new project with name " + newProjectsCreatePayload.ProjectDisplayName,
+		})
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status":  "fail",
+			"message": "Transaction commit failed",
+		})
+		return
+	}
+
 	c.JSON(http.StatusCreated, gin.H{
 		"status":  "success",
 		"message": "Created new project with name " + newProjectsCreatePayload.ProjectDisplayName,
+		"id":      projectId,
 	})
 
 }
 
 func ProjectUpdate(c *gin.Context) {
 	var newProjectsUpdatePayload interfaces.ProjectsUpdatePayload
+
+	currentUser, err := user.GetCurrentUser(c)
+
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "fail",
+			"message": "Failed to parse current user info.",
+		})
+		return
+	}
 
 	if err := c.BindJSON(&newProjectsUpdatePayload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -78,6 +131,16 @@ func ProjectUpdate(c *gin.Context) {
 		return
 	}
 
+	projectAccess, err := access.GetAccessForProject(newProjectsUpdatePayload.ProjectID, currentUser.Uid)
+
+	if err != nil || !projectAccess.HasWriteAccess {
+		c.JSON(http.StatusForbidden, gin.H{
+			"status":  "fail",
+			"message": "Access denied to this resource",
+		})
+		return
+	}
+
 	db, err := sqlquery.GetSqlInstance()
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -91,7 +154,6 @@ func ProjectUpdate(c *gin.Context) {
 	_, err = db.Exec(sqlquery.ProjectUpdateQuery, newProjectsUpdatePayload.ProjectDisplayName, newProjectsUpdatePayload.ProjectID)
 
 	if err != nil {
-		fmt.Println(err)
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
 			"message": "Failed to update project with name " + newProjectsUpdatePayload.ProjectDisplayName,
@@ -109,10 +171,30 @@ func ProjectUpdate(c *gin.Context) {
 func ProjectGet(c *gin.Context) {
 	projectId := c.Query("projectId")
 
+	currentUser, err := user.GetCurrentUser(c)
+
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "fail",
+			"message": "Failed to parse current user info.",
+		})
+		return
+	}
+
 	if projectId == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
 			"message": "Missing required parameter: projectId",
+		})
+		return
+	}
+
+	projectAccess, err := access.GetAccessForProject(projectId, currentUser.Uid)
+
+	if err != nil || !projectAccess.HasReadAccess {
+		c.JSON(http.StatusForbidden, gin.H{
+			"status":  "fail",
+			"message": "Access denied to this resource",
 		})
 		return
 	}
@@ -176,6 +258,16 @@ func ProjectGet(c *gin.Context) {
 func ProjectDelete(c *gin.Context) {
 	var payload interfaces.ProjectsDeletePayload
 
+	currentUser, err := user.GetCurrentUser(c)
+
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "fail",
+			"message": "Failed to parse current user info.",
+		})
+		return
+	}
+
 	if err := c.BindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
@@ -188,6 +280,16 @@ func ProjectDelete(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
 			"message": "Missing required parameter: id",
+		})
+		return
+	}
+
+	projectAccess, err := access.GetAccessForProject(payload.ProjectID, currentUser.Uid)
+
+	if err != nil || !projectAccess.HasDeleteAccess {
+		c.JSON(http.StatusForbidden, gin.H{
+			"status":  "fail",
+			"message": "Access denied to this resource",
 		})
 		return
 	}
@@ -236,4 +338,55 @@ func ProjectDelete(c *gin.Context) {
 		"message": fmt.Sprintf("Project with ID %d deleted successfully.", payload.ProjectID),
 	})
 
+}
+
+func ListProjectByUser(c *gin.Context) {
+	currentUser, err := user.GetCurrentUser(c)
+
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "fail",
+			"message": "Failed to parse current user info.",
+		})
+		return
+	}
+
+	var projectList []any
+
+	db, err := sqlquery.GetSqlInstance()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "fail",
+			"message": "Failed to connect to db.",
+		})
+		return
+	}
+	defer db.Close()
+
+	rows, err := db.Query(sqlquery.ListAllProjectByUser, currentUser.Uid)
+
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "fail",
+			"message": "Failed to fetch project list.",
+		})
+		return
+	}
+
+	for rows.Next() {
+		var id int
+		var name string
+		if err := rows.Scan(&id, &name); err != nil {
+			log.Fatal(err)
+		}
+		projectList = append(projectList, map[string]any{
+			"id":   id,
+			"name": name,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status": "success",
+		"data":   projectList,
+	})
 }

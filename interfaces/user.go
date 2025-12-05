@@ -1,20 +1,10 @@
 package interfaces
 
-type UserCreatePayload struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
-type UserUpdatePayload struct {
-	ID       int    `json:"id"`
-	Username string `json:"username"`
-}
-
-type UserDeletePayload struct {
-	ID int `json:"id"`
-}
-
-type UserSigninPayload struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+type UserPayload struct {
+	Uid            string `json:"uid"`
+	PersonId       string `json:"personId"`
+	ProfilePicture string `json:"profilePicture"`
+	ExpiresAt      string `json:"expiresAt"`
+	UserFullName   string `json:"userFullName"`
+	UserName       string `json:"userName"`
 }

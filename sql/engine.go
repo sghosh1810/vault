@@ -2,23 +2,19 @@ package sqlengine
 
 import (
 	"database/sql"
-	"os"
 
-	"shounak.me/configmanager/config"
+	"cozeva.com/vault/config"
 )
 
 func GetSqlInstance() (*sql.DB, error) {
-	dbDriver := os.Getenv("api.dbdriver")
-	if dbDriver == "" {
-		dbDriver = config.DefaultDBDriver
-	}
+	dbDriver := config.GetConfigValue("db.defaultdriver")
 
 	var db *sql.DB
 	var err error
 
 	switch dbDriver {
 	case "sqlite":
-		db, err = sql.Open("sqlite3", config.SqliteDbLocation)
+		db, err = sql.Open("sqlite3", config.GetConfigValue("db.sqlitelocation"))
 	case "mysql":
 	}
 

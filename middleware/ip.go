@@ -2,14 +2,14 @@ package middleware
 
 import (
 	"net/http"
-	"os"
 
+	"cozeva.com/vault/config"
+	"cozeva.com/vault/pkg/validation"
 	"github.com/gin-gonic/gin"
-	"shounak.me/configmanager/pkg/validation"
 )
 
 func CheckIP(c *gin.Context) {
-	validIPRange := os.Getenv("api.allowediprange")
+	validIPRange := config.GetConfigValue("api.config.allowediprange")
 
 	if validIPRange == "" {
 		c.Next()

@@ -1,2 +1,2 @@
-# ConfigManager
-Open Source Hashicorp Vault Alternative
+# vault
+Vault is a tool for securely accessing secrets
