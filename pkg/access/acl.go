@@ -7,7 +7,7 @@ import (
 	sqlengine "cozeva.com/vault/sql"
 )
 
-func GetAccessForSecret(secretId any, userId string) (interfaces.AccessControlPayload, error) {
+func GetAccessForSecret(secretId any, userId int64) (interfaces.AccessControlPayload, error) {
 	var secretAccess interfaces.AccessControlPayload
 	db, err := sqlengine.GetSqlInstance()
 	if err != nil {
@@ -31,7 +31,7 @@ func GetAccessForSecret(secretId any, userId string) (interfaces.AccessControlPa
 	return secretAccess, nil
 }
 
-func GetAccessForProject(projectId any, userId string) (interfaces.AccessControlPayload, error) {
+func GetAccessForProject(projectId any, userId int64) (interfaces.AccessControlPayload, error) {
 	var projectAccess interfaces.AccessControlPayload
 	db, err := sqlengine.GetSqlInstance()
 	if err != nil {

@@ -79,10 +79,18 @@ func main() {
 	//route  to map secret with a project
 	authGroup.POST("/operation/map", api.MapSecretToProject)
 
+	//routes for user logout and token refresh
+	authGroup.POST("/user/logout", api.UserLogout)
+	authGroup.POST("/auth/refresh", api.RefreshTokenHandler)
+
 	anonGroup := router.Group(apiBasePath, middleware.CheckIP)
 
 	//route to get project specific data
 	anonGroup.GET("/secret/list", api.ListSecretByProjectUid)
+
+	//route for signup and signin
+	anonGroup.POST("/user/signup", api.UserSignup)
+	anonGroup.POST("/user/signin", api.UserSignin)
 
 	router.Run(fmt.Sprintf(":%d", port))
 }

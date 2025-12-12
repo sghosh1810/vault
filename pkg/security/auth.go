@@ -1,8 +1,11 @@
 package security
 
 import (
+	"strconv"
 	"strings"
+	"time"
 
+	"cozeva.com/vault/interfaces"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -48,4 +51,32 @@ func VerifyJWT(authHeader string) (jwt.MapClaims, any) {
 	}
 
 	return claims, nil
+}
+
+func GenerateJWT(userID int64, sessionID string, ttl time.Duration) (string, error) {
+	secret := []byte(GetJwtKeyRing())
+	now := time.Now()
+	expiresAt := now.Add(ttl)
+
+	claims := interfaces.JwtClaims{
+		Uid:       userID,
+		SessionID: sessionID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(expiresAt),
+			IssuedAt:  jwt.NewNumericDate(now),
+			Subject:   strconv.FormatInt(userID, 10),
+			ID:        sessionID,
+			Issuer:    "vault",
+		},
+	}
+
+	// HS256 signed token
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+	signedToken, err := token.SignedString(secret)
+	if err != nil {
+		return "", err
+	}
+
+	return signedToken, nil
 }
