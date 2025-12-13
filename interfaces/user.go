@@ -1,13 +1,8 @@
 package interfaces
 
 type UserPayload struct {
-	Uid            int64  `json:"uid"`
-	SessionID      string `json:"session_id"`
-	FirstName      string `json:"FirstName"`
-	LastName       string `json:"LastName"`
-	Email          string `json:"email"`
-	ProfilePicture string `json:"profilePicture"`
-	Password       string `json:"Password"`
+	Uid       int64  `json:"uid"`
+	SessionID string `json:"session_id"`
 }
 
 type UserSignupPayload struct {
