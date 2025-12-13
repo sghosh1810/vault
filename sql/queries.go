@@ -112,3 +112,42 @@ const (
 		WHERE user_id = ? AND secret_id = ?;
 	`
 )
+
+const (
+	InsertUserQuery = `
+		INSERT INTO users (
+			first_name, 
+			last_name, 
+			email, 
+			password_hash, 
+			profile_picture
+		) VALUES (?, ?, ?, ?, ?);
+	`
+	CheckUserCreDentialsQuery = `
+		SELECT id, password_hash
+		FROM users
+		WHERE email = ?;
+	`
+	InsertUserSessionsQuery = `
+		INSERT INTO user_sessions (
+			user_id, 
+			session_id,
+			refresh_token_hash,
+			refresh_token_expires_at
+		) VALUES (?, ?, ?, ?);
+	`
+	DeleteSessionIDFromUserSessionsTable = `
+		DELETE FROM user_sessions
+        WHERE user_id = ?
+        AND session_id = ?;
+	`
+	SelectUserSessionQuery = `
+		SELECT id, refresh_token_hash, refresh_token_expires_at
+		FROM user_sessions
+		WHERE user_id = ? AND session_id = ?;
+	`
+	UpdateUserSessionIDForUserQuery = `
+		UPDATE user_sessions SET session_id = ?, refresh_token_hash = ?, refresh_token_expires_at = ?, updated_at = ? WHERE id = ?;
+	`
+	DeleteExpiredSessionsQuery = `DELETE FROM user_sessions WHERE refresh_token_expires_at < CURRENT_TIMESTAMP`
+)
