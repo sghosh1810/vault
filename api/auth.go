@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"os"
 	"time"
@@ -12,6 +13,7 @@ import (
 	sqlquery "cozeva.com/vault/sql"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/mattn/go-sqlite3"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -78,6 +80,17 @@ func UserSignup(c *gin.Context) {
 	// Create a new user in the database
 	_, err = db.Exec(sqlquery.InsertUserQuery, newUserSignupPayload.FirstName, newUserSignupPayload.LastName, newUserSignupPayload.Email, hash, newUserSignupPayload.ProfilePicture)
 	if err != nil {
+		// Check if it is a SQLite UNIQUE constraint error
+		var sqliteErr sqlite3.Error
+		if errors.As(err, &sqliteErr) && sqliteErr.Code == sqlite3.ErrConstraint {
+			if sqliteErr.ExtendedCode == sqlite3.ErrConstraintUnique {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"status":  "fail",
+					"message": "email already exists",
+				})
+				return
+			}
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"status":  "fail",
 			"message": "Failed to create new user.",
@@ -161,7 +174,7 @@ func UserSignin(c *gin.Context) {
 		return
 	}
 
-	refreshTokenExpiry := time.Now().Add(refreshTTL)
+	refreshTokenExpiry := time.Now().Add(refreshTTL).UTC().Format("2006-01-02 15:04:05")
 	_, err = db.Exec(sqlquery.InsertUserSessionsQuery, creds.ID, sessionId, refreshTokenHash, refreshTokenExpiry)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -311,13 +324,14 @@ func RefreshTokenHandler(c *gin.Context) {
 
 	// Refresh token will expire soon — generating new refresh token
 	timeLeft := time.Until(refreshTokenInfo.RefreshTokenExpiry)
+	formattedRefreshTokenExpiry := refreshTokenInfo.RefreshTokenExpiry.Format("2006-01-02 15:04:05")
 	if timeLeft <= jwtTokenTTL {
 		refreshTokenInfo.RefreshTokenHash, _ = security.GenerateHash(uuid.NewString())
 		newRefreshTokenTTL, _ := time.ParseDuration(os.Getenv("core.jwt.refresh.token.ttl"))
-		refreshTokenInfo.RefreshTokenExpiry = time.Now().Add(newRefreshTokenTTL)
+		formattedRefreshTokenExpiry = time.Now().Add(newRefreshTokenTTL).UTC().Format("2006-01-02 15:04:05")
 	}
 
-	_, err = db.Exec(sqlquery.UpdateUserSessionIDForUserQuery, newSessionId, refreshTokenInfo.RefreshTokenHash, refreshTokenInfo.RefreshTokenExpiry, time.Now().UTC(), refreshTokenInfo.ID)
+	_, err = db.Exec(sqlquery.UpdateUserSessionIDForUserQuery, newSessionId, refreshTokenInfo.RefreshTokenHash, formattedRefreshTokenExpiry, time.Now().UTC().Format("2006-01-02 15:04:05"), refreshTokenInfo.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"status":  "fail",

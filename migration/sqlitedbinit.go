@@ -63,7 +63,7 @@ func InitSqliteDB() {
 		user_id INTEGER NOT NULL,
 		session_id TEXT NOT NULL,
 		refresh_token_hash TEXT NOT NULL,
-        refresh_expires_at DATETIME NOT NULL,
+        refresh_token_expires_at DATETIME NOT NULL,
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		FOREIGN KEY (user_id) REFERENCES users(id)

@@ -11,6 +11,7 @@ import (
 	"cozeva.com/vault/middleware"
 	"cozeva.com/vault/pkg/crud"
 	"cozeva.com/vault/pkg/eurekaclient"
+	"cozeva.com/vault/ticker"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 )
@@ -91,6 +92,9 @@ func main() {
 	//route for signup and signin
 	anonGroup.POST("/user/signup", api.UserSignup)
 	anonGroup.POST("/user/signin", api.UserSignin)
+
+	//session cleanup using ticker
+	ticker.StartSessionCleanup()
 
 	router.Run(fmt.Sprintf(":%d", port))
 }

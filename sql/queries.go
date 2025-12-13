@@ -133,7 +133,7 @@ const (
 			user_id, 
 			session_id,
 			refresh_token_hash,
-			refresh_expires_at
+			refresh_token_expires_at
 		) VALUES (?, ?, ?, ?);
 	`
 	DeleteSessionIDFromUserSessionsTable = `
@@ -142,11 +142,12 @@ const (
         AND session_id = ?;
 	`
 	SelectUserSessionQuery = `
-		SELECT id, refresh_token_hash, refresh_expires_at
+		SELECT id, refresh_token_hash, refresh_token_expires_at
 		FROM user_sessions
 		WHERE user_id = ? AND session_id = ?;
 	`
 	UpdateUserSessionIDForUserQuery = `
-		UPDATE user_sessions SET session_id = ?, refresh_token_hash = ?, refresh_expires_at = ?, updated_at = ? WHERE id = ?;
+		UPDATE user_sessions SET session_id = ?, refresh_token_hash = ?, refresh_token_expires_at = ?, updated_at = ? WHERE id = ?;
 	`
+	DeleteExpiredSessionsQuery = `DELETE FROM user_sessions WHERE refresh_token_expires_at < CURRENT_TIMESTAMP`
 )
