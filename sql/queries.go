@@ -111,6 +111,11 @@ const (
 		FROM user_secret_access
 		WHERE user_id = ? AND secret_id = ?;
 	`
+	CheckUserWorkspaceAccessQuery = `
+		SELECT has_read_access, has_write_access, has_share_access, has_delete_access
+		FROM user_workspace_access
+		WHERE user_id = ? AND workspace_id = ?;
+	`
 )
 
 const (
@@ -150,4 +155,38 @@ const (
 		UPDATE user_sessions SET session_id = ?, refresh_token_hash = ?, refresh_token_expires_at = ?, updated_at = ? WHERE id = ?;
 	`
 	DeleteExpiredSessionsQuery = `DELETE FROM user_sessions WHERE refresh_token_expires_at < CURRENT_TIMESTAMP`
+)
+
+const (
+	WorkspaceInsertQuery = `
+		INSERT INTO workspace (name, description) VALUES (?, ?)
+	`
+	InsertUserWorkspaceAccessQuery = `
+		INSERT INTO user_workspace_access (
+			user_id,
+			workspace_id,
+			has_write_access,
+			has_share_access,
+			has_delete_access
+		) VALUES (?, ?, ?, ?, ?);
+	`
+	WorkspaceUpdateQuery = `
+		UPDATE workspace SET name = ?, description = ? WHERE id = ?
+	`
+	WorkspaceGetQuery = `
+		SELECT id, name, description FROM workspace WHERE id = ?
+	`
+	DeleteWorkspaceFromMapTable = `
+		DELETE FROM secret_workspace_map WHERE workspace_id = ?
+	`
+	DeleteWorkspaceFromWorkspaceTable = `
+		DELETE FROM workspace WHERE id = ?
+	`
+	ListAllWorkspaceByUser = `
+		SELECT w.id,w.name,w.description
+		FROM workspace w
+		JOIN user_workspace_access uwa
+		ON w.id = uwa.workspace_id
+		WHERE uwa.user_id = ?
+	`
 )

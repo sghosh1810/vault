@@ -54,3 +54,27 @@ func GetAccessForProject(projectId any, userId int64) (interfaces.AccessControlP
 
 	return projectAccess, nil
 }
+
+func GetAccessForWorkspace(workspaceId any, userId int64) (interfaces.AccessControlPayload, error) {
+	var workspaceAccess interfaces.AccessControlPayload
+	db, err := sqlengine.GetSqlInstance()
+	if err != nil {
+		return interfaces.AccessControlPayload{}, err
+	}
+	defer db.Close()
+
+	rows, err := db.Query(sqlengine.CheckUserWorkspaceAccessQuery, userId, workspaceId)
+
+	if err != nil {
+		return interfaces.AccessControlPayload{}, err
+	}
+
+	for rows.Next() {
+		if err := rows.Scan(&workspaceAccess.HasReadAccess, &workspaceAccess.HasWriteAccess, &workspaceAccess.HasShareAccess, &workspaceAccess.HasDeleteAccess); err != nil {
+			log.Fatal(err)
+			return interfaces.AccessControlPayload{}, err
+		}
+	}
+
+	return workspaceAccess, nil
+}
