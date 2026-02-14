@@ -11,7 +11,6 @@ import (
 	sqlquery "cozeva.com/vault/sql"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	_ "github.com/mattn/go-sqlite3"
 )
 
 func ProjectCreate(c *gin.Context) {
@@ -30,7 +29,7 @@ func ProjectCreate(c *gin.Context) {
 	if err := c.BindJSON(&newProjectsCreatePayload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
-			"message": "Missing required parameter: name",
+			"message": "Missing required parameter: name and workspace_id",
 		})
 		return
 	}
@@ -51,6 +50,17 @@ func ProjectCreate(c *gin.Context) {
 		})
 		return
 	}
+
+	workspaceAccess, err := access.GetAccessForWorkspace(newProjectsCreatePayload.WorkspaceID, currentUser.Uid)
+
+	if err != nil || !workspaceAccess.HasWriteAccess {
+		c.JSON(http.StatusForbidden, gin.H{
+			"status":  "fail",
+			"message": "You don't have write access to the workspace associated with this project.",
+		})
+		return
+	}
+
 	defer db.Close()
 
 	tx, err := db.Begin()
@@ -62,7 +72,7 @@ func ProjectCreate(c *gin.Context) {
 		return
 	}
 
-	result, err := tx.Exec(sqlquery.ProjectInsertQuery, newProjectsCreatePayload.ProjectDisplayName, uuid.NewString())
+	result, err := tx.Exec(sqlquery.ProjectInsertQuery, newProjectsCreatePayload.ProjectDisplayName, uuid.NewString(), newProjectsCreatePayload.WorkspaceID)
 
 	if err != nil {
 		tx.Rollback()
@@ -75,7 +85,7 @@ func ProjectCreate(c *gin.Context) {
 
 	projectId, _ := result.LastInsertId()
 
-	_, err = tx.Exec(sqlquery.InsertUserProjectAccessQuery, currentUser.Uid, projectId, 1, 1, 1)
+	_, err = tx.Exec(sqlquery.InsertWorkspaceProjectAccessQuery, newProjectsCreatePayload.WorkspaceID, projectId, 1, 1, 1)
 
 	if err != nil {
 		tx.Rollback()
@@ -118,20 +128,20 @@ func ProjectUpdate(c *gin.Context) {
 	if err := c.BindJSON(&newProjectsUpdatePayload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
-			"message": "Missing required parameter: name and id",
+			"message": "Missing required parameter: name,id and workspace_id",
 		})
 		return
 	}
 
-	if newProjectsUpdatePayload.ProjectDisplayName == "" || newProjectsUpdatePayload.ProjectID == 0 {
+	if newProjectsUpdatePayload.ProjectDisplayName == "" || newProjectsUpdatePayload.ProjectID == 0 || newProjectsUpdatePayload.WorkspaceID == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
-			"message": "Property name and id must be a valid string, integer respectively.",
+			"message": "Property name and id, workspace_id must be a valid string, integer and integer respectively.",
 		})
 		return
 	}
 
-	projectAccess, err := access.GetAccessForProject(newProjectsUpdatePayload.ProjectID, currentUser.Uid)
+	projectAccess, err := access.GetAccessForProject(newProjectsUpdatePayload.ProjectID, newProjectsUpdatePayload.WorkspaceID, currentUser.Uid)
 
 	if err != nil || !projectAccess.HasWriteAccess {
 		c.JSON(http.StatusForbidden, gin.H{
@@ -151,7 +161,7 @@ func ProjectUpdate(c *gin.Context) {
 	}
 	defer db.Close()
 
-	_, err = db.Exec(sqlquery.ProjectUpdateQuery, newProjectsUpdatePayload.ProjectDisplayName, newProjectsUpdatePayload.ProjectID)
+	_, err = db.Exec(sqlquery.ProjectUpdateQuery, newProjectsUpdatePayload.ProjectDisplayName, newProjectsUpdatePayload.ProjectID, newProjectsUpdatePayload.WorkspaceID)
 
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -170,6 +180,7 @@ func ProjectUpdate(c *gin.Context) {
 
 func ProjectGet(c *gin.Context) {
 	projectId := c.Query("projectId")
+	workspaceId := c.Query("workspaceId")
 
 	currentUser, err := user.GetCurrentUser(c)
 
@@ -181,15 +192,15 @@ func ProjectGet(c *gin.Context) {
 		return
 	}
 
-	if projectId == "" {
+	if projectId == "" || workspaceId == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
-			"message": "Missing required parameter: projectId",
+			"message": "Missing required parameter: projectId and workspaceId",
 		})
 		return
 	}
 
-	projectAccess, err := access.GetAccessForProject(projectId, currentUser.Uid)
+	projectAccess, err := access.GetAccessForProject(projectId, workspaceId, currentUser.Uid)
 
 	if err != nil || !projectAccess.HasReadAccess {
 		c.JSON(http.StatusForbidden, gin.H{
@@ -211,7 +222,7 @@ func ProjectGet(c *gin.Context) {
 	}
 	defer db.Close()
 
-	rows, err := db.Query(sqlquery.ProjectGetQuery, projectId)
+	rows, err := db.Query(sqlquery.ProjectGetQuery, projectId, workspaceId)
 
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -271,20 +282,20 @@ func ProjectDelete(c *gin.Context) {
 	if err := c.BindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
-			"message": "Missing required parameter: id",
+			"message": "Missing required parameter: id and workspace_id",
 		})
 		return
 	}
 
-	if payload.ProjectID == 0 {
+	if payload.ProjectID == 0 || payload.WorkspaceID == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
-			"message": "Missing required parameter: id",
+			"message": "Missing required parameter: id and workspace_id",
 		})
 		return
 	}
 
-	projectAccess, err := access.GetAccessForProject(payload.ProjectID, currentUser.Uid)
+	projectAccess, err := access.GetAccessForProject(payload.ProjectID, payload.WorkspaceID, currentUser.Uid)
 
 	if err != nil || !projectAccess.HasDeleteAccess {
 		c.JSON(http.StatusForbidden, gin.H{
@@ -315,7 +326,7 @@ func ProjectDelete(c *gin.Context) {
 	}
 
 	// Delete from projects table
-	result, err := db.Exec(sqlquery.DeleteProjectFromProjectTable, payload.ProjectID)
+	result, err := db.Exec(sqlquery.DeleteProjectFromProjectTable, payload.ProjectID, payload.WorkspaceID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"status":  "fail",
@@ -340,7 +351,17 @@ func ProjectDelete(c *gin.Context) {
 
 }
 
-func ListProjectByUser(c *gin.Context) {
+func ListProjectByWorkspace(c *gin.Context) {
+	workspaceId := c.Query("workspaceId")
+
+	if workspaceId == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "fail",
+			"message": "Missing required parameter: workspaceId",
+		})
+		return
+	}
+
 	currentUser, err := user.GetCurrentUser(c)
 
 	if err != nil {
@@ -351,7 +372,17 @@ func ListProjectByUser(c *gin.Context) {
 		return
 	}
 
-	var projectList []any
+	workspaceAccess, err := access.GetAccessForWorkspace(workspaceId, currentUser.Uid)
+
+	if err != nil || !workspaceAccess.HasReadAccess {
+		c.JSON(http.StatusForbidden, gin.H{
+			"status":  "fail",
+			"message": "Access denied to this workspace",
+		})
+		return
+	}
+
+	projectList := []any{}
 
 	db, err := sqlquery.GetSqlInstance()
 	if err != nil {
@@ -363,7 +394,7 @@ func ListProjectByUser(c *gin.Context) {
 	}
 	defer db.Close()
 
-	rows, err := db.Query(sqlquery.ListAllProjectByUser, currentUser.Uid)
+	rows, err := db.Query(sqlquery.ListAllProjectByWorkspace, currentUser.Uid, workspaceId)
 
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -376,12 +407,15 @@ func ListProjectByUser(c *gin.Context) {
 	for rows.Next() {
 		var id int
 		var name string
-		if err := rows.Scan(&id, &name); err != nil {
+		var uid string
+
+		if err := rows.Scan(&id, &name, &uid); err != nil {
 			log.Fatal(err)
 		}
 		projectList = append(projectList, map[string]any{
 			"id":   id,
 			"name": name,
+			"uid":  uid,
 		})
 	}
 
