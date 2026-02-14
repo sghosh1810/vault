@@ -8,9 +8,10 @@ type SecretCreatePayload struct {
 }
 
 type SecretUpdatePayload struct {
-	SecretID    int    `json:"id"`
-	SecretValue string `json:"value"`
-	WorkspaceID int    `json:"workspace_id"`
+	SecretID          int    `json:"id"`
+	SecretValue       string `json:"value"`
+	SecretEnvironment string `json:"environment"`
+	WorkspaceID       int    `json:"workspace_id"`
 }
 
 type SecretDeletePayload struct {

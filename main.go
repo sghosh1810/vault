@@ -79,23 +79,19 @@ func main() {
 		"update": api.SecretUpdate,
 		"delete": api.SecretDelete,
 		"get":    api.SecretGet,
+		"list":   api.ListSecretByWorkspace,
 	})
 
-	//route for user specific resource lists
-	// authGroup.GET("/user/secret/list", api.ListSecretByUser)
-	// authGroup.GET("/user/project/list", api.ListProjectByUser)
-
 	//route  to map secret with a project
-	authGroup.POST("/operation/map", api.MapSecretToProject)
+	authGroup.POST("/project/map", api.MapSecretToProject)
+	//route to list secrets by project id
+	authGroup.GET("/project/secret/list", api.ListSecretByProject)
 
 	//routes for user logout and token refresh
 	authGroup.POST("/user/logout", api.UserLogout)
 	authGroup.POST("/auth/refresh", api.RefreshTokenHandler)
 
 	anonGroup := router.Group(apiBasePath, middleware.CheckIP)
-
-	//route to get project specific data
-	anonGroup.GET("/secret/list", api.ListSecretByProjectUid)
 
 	//route for signup and signin
 	anonGroup.POST("/user/signup", api.UserSignup)

@@ -7,7 +7,7 @@ import (
 	sqlengine "cozeva.com/vault/sql"
 )
 
-func GetAccessForSecret(secretId any, userId int64) (interfaces.AccessControlPayload, error) {
+func GetAccessForSecret(secretId any, workspaceId any, userId int64) (interfaces.AccessControlPayload, error) {
 	var secretAccess interfaces.AccessControlPayload
 	db, err := sqlengine.GetSqlInstance()
 	if err != nil {
@@ -15,7 +15,7 @@ func GetAccessForSecret(secretId any, userId int64) (interfaces.AccessControlPay
 	}
 	defer db.Close()
 
-	rows, err := db.Query(sqlengine.CheckUserSecretAccessQuery, userId, secretId)
+	rows, err := db.Query(sqlengine.CheckUserWorkspaceSecretAccessQuery, userId, secretId, workspaceId)
 
 	if err != nil {
 		return interfaces.AccessControlPayload{}, err

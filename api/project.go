@@ -353,6 +353,15 @@ func ProjectDelete(c *gin.Context) {
 
 func ListProjectByWorkspace(c *gin.Context) {
 	workspaceId := c.Query("workspaceId")
+
+	if workspaceId == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "fail",
+			"message": "Missing required parameter: workspaceId",
+		})
+		return
+	}
+
 	currentUser, err := user.GetCurrentUser(c)
 
 	if err != nil {
@@ -363,7 +372,17 @@ func ListProjectByWorkspace(c *gin.Context) {
 		return
 	}
 
-	var projectList []any
+	workspaceAccess, err := access.GetAccessForWorkspace(workspaceId, currentUser.Uid)
+
+	if err != nil || !workspaceAccess.HasReadAccess {
+		c.JSON(http.StatusForbidden, gin.H{
+			"status":  "fail",
+			"message": "Access denied to this workspace",
+		})
+		return
+	}
+
+	projectList := []any{}
 
 	db, err := sqlquery.GetSqlInstance()
 	if err != nil {
@@ -375,7 +394,7 @@ func ListProjectByWorkspace(c *gin.Context) {
 	}
 	defer db.Close()
 
-	rows, err := db.Query(sqlquery.ListAllProjectByUser, currentUser.Uid, workspaceId)
+	rows, err := db.Query(sqlquery.ListAllProjectByWorkspace, currentUser.Uid, workspaceId)
 
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{

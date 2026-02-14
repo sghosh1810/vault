@@ -20,15 +20,15 @@ func SecretCreate(c *gin.Context) {
 	if err := c.BindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
-			"message": "Missing required parameter: name, value and environment",
+			"message": "Missing required parameter: name, value, workspace_id and environment",
 		})
 		return
 	}
 
-	if payload.SecretName == "" || payload.SecretValue == "" || payload.SecretEnvironment == "" {
+	if payload.SecretName == "" || payload.SecretValue == "" || payload.SecretEnvironment == "" || payload.WorkspaceID == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
-			"message": "Secret name, value and environment are required",
+			"message": "Secret name, value, workspace_id and environment are required",
 		})
 		return
 	}
@@ -39,6 +39,16 @@ func SecretCreate(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
 			"message": "Failed to parse current user info.",
+		})
+		return
+	}
+
+	workspaceAccess, err := access.GetAccessForWorkspace(payload.WorkspaceID, currentUser.Uid)
+
+	if err != nil || !workspaceAccess.HasWriteAccess {
+		c.JSON(http.StatusForbidden, gin.H{
+			"status":  "fail",
+			"message": "You don't have write access to the workspace associated with this secret.",
 		})
 		return
 	}
@@ -62,7 +72,7 @@ func SecretCreate(c *gin.Context) {
 		return
 	}
 
-	res, err := tx.Exec(sqlquery.SecretInsertQuery, payload.SecretName)
+	res, err := tx.Exec(sqlquery.SecretInsertQuery, payload.SecretName, payload.WorkspaceID)
 	if err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -93,7 +103,7 @@ func SecretCreate(c *gin.Context) {
 		return
 	}
 
-	_, err = tx.Exec(sqlquery.InsertUserSecretAccessQuery, currentUser.Uid, secretId, 1, 1, 1)
+	_, err = tx.Exec(sqlquery.InsertWorkspaceSecretAccessQuery, payload.WorkspaceID, secretId, 1, 1, 1)
 
 	if err != nil {
 		tx.Rollback()
@@ -135,20 +145,20 @@ func SecretUpdate(c *gin.Context) {
 	if err := c.BindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
-			"message": "Missing required parameter: id and value",
+			"message": "Missing required parameter: id, value and workspace_id",
 		})
 		return
 	}
 
-	if payload.SecretID == 0 || payload.SecretValue == "" {
+	if payload.SecretID == 0 || payload.SecretValue == "" || payload.WorkspaceID == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
-			"message": "Secret ID and value are required",
+			"message": "Secret ID, value and workspace_id are required",
 		})
 		return
 	}
 
-	projectAccess, err := access.GetAccessForSecret(payload.SecretID, currentUser.Uid)
+	projectAccess, err := access.GetAccessForSecret(payload.SecretID, payload.WorkspaceID, currentUser.Uid)
 
 	if err != nil || !projectAccess.HasWriteAccess {
 		c.JSON(http.StatusForbidden, gin.H{
@@ -169,7 +179,7 @@ func SecretUpdate(c *gin.Context) {
 	defer db.Close()
 
 	var latestVersion int
-	err = db.QueryRow(sqlquery.SecretGetLatestVersionQuery, payload.SecretID).Scan(&latestVersion)
+	err = db.QueryRow(sqlquery.SecretGetLatestVersionQuery, payload.SecretID, payload.SecretEnvironment).Scan(&latestVersion)
 	if err != nil && err != sql.ErrNoRows {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"status":  "fail",
@@ -189,7 +199,7 @@ func SecretUpdate(c *gin.Context) {
 		return
 	}
 
-	_, err = db.Exec(sqlquery.SecretVersionInsertQuery, payload.SecretID, newVersion, encryptedData)
+	_, err = db.Exec(sqlquery.SecretVersionInsertQuery, payload.SecretID, newVersion, encryptedData, payload.SecretEnvironment)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
@@ -206,6 +216,8 @@ func SecretUpdate(c *gin.Context) {
 
 func SecretGet(c *gin.Context) {
 	secretId := c.Query("secretId")
+	workspaceId := c.Query("workspaceId")
+
 	currentUser, err := user.GetCurrentUser(c)
 
 	if err != nil {
@@ -216,15 +228,15 @@ func SecretGet(c *gin.Context) {
 		return
 	}
 
-	if secretId == "" {
+	if secretId == "" || workspaceId == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
-			"message": "Missing required parameter: secretId",
+			"message": "Missing required parameter: secretId and workspaceId",
 		})
 		return
 	}
 
-	projectAccess, err := access.GetAccessForSecret(secretId, currentUser.Uid)
+	projectAccess, err := access.GetAccessForSecret(secretId, workspaceId, currentUser.Uid)
 
 	if err != nil || !projectAccess.HasReadAccess {
 		c.JSON(http.StatusForbidden, gin.H{
@@ -303,15 +315,15 @@ func SecretDelete(c *gin.Context) {
 		return
 	}
 
-	if payload.SecretID == 0 {
+	if payload.SecretID == 0 || payload.WorkspaceID == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
-			"message": "Missing required parameter: id",
+			"message": "Missing required parameter: id and workspace_id",
 		})
 		return
 	}
 
-	projectAccess, err := access.GetAccessForSecret(payload.SecretID, currentUser.Uid)
+	projectAccess, err := access.GetAccessForSecret(payload.SecretID, payload.WorkspaceID, currentUser.Uid)
 
 	if err != nil || !projectAccess.HasDeleteAccess {
 		c.JSON(http.StatusForbidden, gin.H{
@@ -352,7 +364,7 @@ func SecretDelete(c *gin.Context) {
 	}
 
 	// Delete from secrets table
-	result, err := db.Exec(sqlquery.DeleteSecretFromSecretTable, payload.SecretID)
+	result, err := db.Exec(sqlquery.DeleteSecretFromSecretTable, payload.SecretID, payload.WorkspaceID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"status":  "fail",
@@ -376,14 +388,34 @@ func SecretDelete(c *gin.Context) {
 	})
 }
 
-func ListSecretByProjectUid(c *gin.Context) {
-	projectUid := c.Query("projectuid")
-	environment := c.Query("environment")
+func ListSecretByProject(c *gin.Context) {
+	projectId := c.Query("projectId")
+	workspaceId := c.Query("workspaceId")
 
-	if projectUid == "" || environment == "" {
+	if projectId == "" || workspaceId == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
-			"message": "Missing required parameter: projectuid and environment",
+			"message": "Missing required parameter: projectuid and workspaceId",
+		})
+		return
+	}
+
+	currentUser, err := user.GetCurrentUser(c)
+
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "fail",
+			"message": "Failed to parse current user info.",
+		})
+		return
+	}
+
+	projectAccess, err := access.GetAccessForProject(projectId, workspaceId, currentUser.Uid)
+
+	if err != nil || !projectAccess.HasReadAccess {
+		c.JSON(http.StatusForbidden, gin.H{
+			"status":  "fail",
+			"message": "Access denied to this project",
 		})
 		return
 	}
@@ -400,12 +432,12 @@ func ListSecretByProjectUid(c *gin.Context) {
 	}
 	defer db.Close()
 
-	rows, err := db.Query(sqlquery.GetAllSecretByProjectUidQuery, projectUid, environment)
+	rows, err := db.Query(sqlquery.GetAllSecretByProjectIdQuery, projectId, workspaceId)
 
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
-			"message": "Failed to get secrets for project with project uid " + projectUid,
+			"message": "Failed to get secrets for project with project id " + projectId,
 		})
 		return
 	}
@@ -414,27 +446,26 @@ func ListSecretByProjectUid(c *gin.Context) {
 
 	for rows.Next() {
 		var id, version int
-		var name, value, environment string
-		if err := rows.Scan(&id, &name, &version, &value, &environment); err != nil {
+		var name, environment string
+
+		if err := rows.Scan(&id, &name, &version, &environment); err != nil {
 			log.Fatal(err)
 		}
 
-		decrytedValue, err := security.DecryptSecret(value)
-		if err == nil {
-			secretList = append(secretList, interfaces.SecretResponse{
-				ID:          id,
-				Name:        name,
-				Version:     version,
-				Value:       decrytedValue,
-				Environment: environment,
-			})
-		}
+		secretList = append(secretList, interfaces.SecretResponse{
+			ID:          id,
+			Name:        name,
+			Version:     version,
+			Value:       "[REDACTED]",
+			Environment: environment,
+		})
+
 	}
 
 	if err := rows.Err(); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
-			"message": "Failed to get secrets for project with project uid " + projectUid,
+			"message": "Failed to get secrets for project with project uid " + projectId,
 		})
 		return
 	}
@@ -446,7 +477,17 @@ func ListSecretByProjectUid(c *gin.Context) {
 
 }
 
-func ListSecretByUser(c *gin.Context) {
+func ListSecretByWorkspace(c *gin.Context) {
+	workspaceId := c.Query("workspaceId")
+
+	if workspaceId == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "fail",
+			"message": "Missing required parameter: workspaceId",
+		})
+		return
+	}
+
 	currentUser, err := user.GetCurrentUser(c)
 
 	if err != nil {
@@ -457,7 +498,17 @@ func ListSecretByUser(c *gin.Context) {
 		return
 	}
 
-	var secretList []any
+	workspaceAccess, err := access.GetAccessForWorkspace(workspaceId, currentUser.Uid)
+
+	if err != nil || !workspaceAccess.HasReadAccess {
+		c.JSON(http.StatusForbidden, gin.H{
+			"status":  "fail",
+			"message": "Access denied to this workspace",
+		})
+		return
+	}
+
+	secretList := []any{}
 
 	db, err := sqlquery.GetSqlInstance()
 	if err != nil {
@@ -469,7 +520,7 @@ func ListSecretByUser(c *gin.Context) {
 	}
 	defer db.Close()
 
-	rows, err := db.Query(sqlquery.ListAllSecretByUser, currentUser.Uid)
+	rows, err := db.Query(sqlquery.ListAllSecretByWorkspace, currentUser.Uid, workspaceId)
 
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{

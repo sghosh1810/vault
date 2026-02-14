@@ -25,7 +25,7 @@ const (
 			has_delete_access
 		) VALUES (?, ?, ?, ?, ?);
 	`
-	ListAllProjectByUser = `
+	ListAllProjectByWorkspace = `
 		SELECT p.id,p.name,p.uid
 		FROM project p
 		JOIN workspace_project_access wpa ON p.id = wpa.project_id
@@ -37,7 +37,7 @@ const (
 
 const (
 	SecretInsertQuery = `
-		INSERT INTO secret (name) VALUES (?);
+		INSERT INTO secret (name, workspace_id) VALUES (?, ?);
 	`
 	SecretVersionInsertQuery = `
 		INSERT INTO secret_version (secret_id, version, value, environment)
@@ -46,15 +46,26 @@ const (
 	SecretGetLatestVersionQuery = `
 		SELECT IFNULL(MAX(version), 0)
 		FROM secret_version
-		WHERE secret_id = ?;
+		WHERE secret_id = ?
+		AND environment = ?
 	`
 	SecretGetLatestValueQuery = `
-		SELECT s.id, s.name, sv.version, sv.value, sv.environment
-		FROM secret s
-		JOIN secret_version sv ON s.id = sv.secret_id
-		WHERE s.id = ?
-		ORDER BY sv.version DESC
-		LIMIT 1;
+		SELECT id, name, version, value, environment
+		FROM (
+			SELECT s.id,
+				s.name,
+				sv.version,
+				sv.value,
+				sv.environment,
+				ROW_NUMBER() OVER (
+					PARTITION BY sv.environment
+					ORDER BY sv.version DESC
+				) as rn
+			FROM secret s
+			JOIN secret_version sv ON s.id = sv.secret_id
+			WHERE s.id = ?
+		) t
+		WHERE rn = 1;
 	`
 	DeleteSecretFromMapTable = `
 		DELETE FROM secret_project_map WHERE secret_id = ?
@@ -63,35 +74,37 @@ const (
 		DELETE FROM secret_version WHERE secret_id = ?
 	`
 	DeleteSecretFromSecretTable = `
-		DELETE FROM secret WHERE id = ?
+		DELETE FROM secret WHERE id = ? AND workspace_id = ?
 	`
-	InsertUserSecretAccessQuery = `
-		INSERT INTO user_secret_access (
-			user_id,
+	InsertWorkspaceSecretAccessQuery = `
+		INSERT INTO workspace_secret_access (
+			workspace_id,
 			secret_id,
 			has_write_access,
 			has_share_access,
 			has_delete_access
 		) VALUES (?, ?, ?, ?, ?);
 	`
-	ListAllSecretByUser = `
+	ListAllSecretByWorkspace = `
 		SELECT s.id,s.name
 		FROM secret s
-		JOIN user_secret_access usa
-		ON s.id = usa.secret_id
-		WHERE usa.user_id = ?
+		JOIN workspace_secret_access wsa ON s.id = wsa.secret_id
+		JOIN user_workspace_access uwa ON wsa.workspace_id = uwa.id
+		WHERE uwa.user_id = ?
+		AND uwa.workspace_id = ?
 	`
 )
 
 const (
-	GetAllSecretByProjectUidQuery = `
-		SELECT s.id, s.name, sv.version, sv.value, sv.environment
+	GetAllSecretByProjectIdQuery = `
+		SELECT s.id, s.name, sv.version, sv.environment
 		FROM secret s
 		JOIN secret_version sv on sv.secret_id = s.id
 		JOIN secret_project_map sp on sp.secret_id = s.id
 		JOIN project p on p.id = sp.project_id
-		WHERE p.uid = ? AND sv.environment = ?
-		ORDER BY sv.id DESC 
+		WHERE p.id = ?
+		GROUP BY sv.environment
+		ORDER BY sv.id DESC
 	`
 )
 
@@ -111,10 +124,14 @@ const (
 		AND wpa.project_id = ? 
 		AND wpa.workspace_id = ?;
 	`
-	CheckUserSecretAccessQuery = `
-		SELECT has_read_access, has_write_access, has_share_access, has_delete_access
-		FROM user_secret_access
-		WHERE user_id = ? AND secret_id = ?;
+	CheckUserWorkspaceSecretAccessQuery = `
+		SELECT uwa.has_read_access * wsa.has_read_access as has_read_access, uwa.has_write_access * wsa.has_write_access as has_write_access, uwa.has_share_access * wsa.has_share_access as has_share_access, uwa.has_delete_access * wsa.has_delete_access as has_delete_access
+		FROM workspace_secret_access wsa
+		JOIN user_workspace_access uwa
+		ON wsa.workspace_id = uwa.id
+		WHERE uwa.user_id = ?
+		AND wsa.secret_id =  ?
+		AND wsa.workspace_id =  ?;
 	`
 	CheckUserWorkspaceAccessQuery = `
 		SELECT has_read_access, has_write_access, has_share_access, has_delete_access
