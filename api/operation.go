@@ -32,7 +32,7 @@ func MapSecretToProject(c *gin.Context) {
 		return
 	}
 
-	projectAccess, err := access.GetAccessForProject(payload.ProjectID, currentUser.Uid)
+	projectAccess, err := access.GetAccessForProject(payload.ProjectID, payload.WorkspaceID, currentUser.Uid)
 
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{

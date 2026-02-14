@@ -48,6 +48,7 @@ func InitSqliteDB() {
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			user_id INTEGER NOT NULL,
 			workspace_id INTEGER NOT NULL,
+			has_read_access BOOLEAN NOT NULL,
 			has_write_access BOOLEAN NOT NULL,
 			has_share_access BOOLEAN NOT NULL,
 			has_delete_access BOOLEAN NOT NULL,
@@ -73,10 +74,10 @@ func InitSqliteDB() {
 			workspace_id INTEGER NOT NULL,
 			project_id INTEGER NOT NULL,
 
-			has_read_access BOOLEAN DEFAULT 1,
-			has_write_access BOOLEAN DEFAULT 0,
-			has_share_access BOOLEAN DEFAULT 0,
-			has_delete_access BOOLEAN DEFAULT 0,
+			has_read_access BOOLEAN NOT NULL,
+			has_write_access BOOLEAN NOT NULL,
+			has_share_access BOOLEAN NOT NULL,
+			has_delete_access BOOLEAN NOT NULL,
 
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -108,11 +109,11 @@ func InitSqliteDB() {
 			workspace_id INTEGER NOT NULL,
 			secret_id INTEGER NOT NULL,
 
-			has_read_access BOOLEAN DEFAULT 1,
-			has_write_access BOOLEAN DEFAULT 0,
-			has_share_access BOOLEAN DEFAULT 0,
-			has_delete_access BOOLEAN DEFAULT 0,
-
+			has_read_access BOOLEAN NOT NULL,
+			has_write_access BOOLEAN NOT NULL,
+			has_share_access BOOLEAN NOT NULL,
+			has_delete_access BOOLEAN NOT NULL,
+			
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 

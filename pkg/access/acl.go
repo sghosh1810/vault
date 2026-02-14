@@ -31,7 +31,7 @@ func GetAccessForSecret(secretId any, userId int64) (interfaces.AccessControlPay
 	return secretAccess, nil
 }
 
-func GetAccessForProject(projectId any, userId int64) (interfaces.AccessControlPayload, error) {
+func GetAccessForProject(projectId any, workspaceId any, userId int64) (interfaces.AccessControlPayload, error) {
 	var projectAccess interfaces.AccessControlPayload
 	db, err := sqlengine.GetSqlInstance()
 	if err != nil {
@@ -39,7 +39,7 @@ func GetAccessForProject(projectId any, userId int64) (interfaces.AccessControlP
 	}
 	defer db.Close()
 
-	rows, err := db.Query(sqlengine.CheckUserProjectAccessQuery, userId, projectId)
+	rows, err := db.Query(sqlengine.CheckUserWorkspaceProjectAccessQuery, userId, projectId, workspaceId)
 
 	if err != nil {
 		return interfaces.AccessControlPayload{}, err

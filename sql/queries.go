@@ -2,23 +2,23 @@ package sqlengine
 
 const (
 	ProjectInsertQuery = `
-		INSERT INTO project (name,uid) VALUES (?,?)
+		INSERT INTO project (name,uid,workspace_id) VALUES (?,?,?);
 	`
 	ProjectUpdateQuery = `
-		UPDATE project SET name = ? WHERE id = ?
+		UPDATE project SET name = ? WHERE id = ? AND workspace_id = ?
 	`
 	ProjectGetQuery = `
-		SELECT * from project WHERE id = ?
+		SELECT p.id,p.name,p.uid from project p WHERE id = ? AND workspace_id = ?
 	`
 	DeleteProjectFromMapTable = `
-		DELETE FROM secret_project_map WHERE project_id = ?
+		DELETE FROM secret_project_map WHERE project_id = ? 
 	`
 	DeleteProjectFromProjectTable = `
-		DELETE FROM project WHERE id = ?
+		DELETE FROM project WHERE id = ? AND workspace_id = ?
 	`
-	InsertUserProjectAccessQuery = `
-		INSERT INTO user_project_access (
-			user_id,
+	InsertWorkspaceProjectAccessQuery = `
+		INSERT INTO workspace_project_access (
+			workspace_id,
 			project_id,
 			has_write_access,
 			has_share_access,
@@ -28,9 +28,10 @@ const (
 	ListAllProjectByUser = `
 		SELECT p.id,p.name
 		FROM project p
-		JOIN user_project_access upa
-		ON p.id = upa.project_id
-		WHERE upa.user_id = ?
+		JOIN workspace_project_access wpa ON p.id = wpa.project_id
+		JOIN user_workspace_access uwa ON wpa.workspace_id = uwa.id
+		WHERE uwa.user_id = ?
+		AND uwa.workspace_id = ?
 	`
 )
 
@@ -101,10 +102,14 @@ const (
 )
 
 const (
-	CheckUserProjectAccessQuery = `
-		SELECT has_read_access, has_write_access, has_share_access, has_delete_access
-		FROM user_project_access
-		WHERE user_id = ? AND project_id = ?;
+	CheckUserWorkspaceProjectAccessQuery = `
+		SELECT uwa.has_read_access * wpa.has_read_access as has_read_access, uwa.has_write_access * wpa.has_write_access as has_write_access, uwa.has_share_access * wpa.has_share_access as has_share_access, uwa.has_delete_access * wpa.has_delete_access as has_delete_access
+		FROM workspace_project_access wpa
+		JOIN user_workspace_access uwa
+		ON wpa.workspace_id = uwa.id
+		WHERE uwa.user_id = ? 
+		AND wpa.project_id = ? 
+		AND wpa.workspace_id = ?;
 	`
 	CheckUserSecretAccessQuery = `
 		SELECT has_read_access, has_write_access, has_share_access, has_delete_access
@@ -165,10 +170,11 @@ const (
 		INSERT INTO user_workspace_access (
 			user_id,
 			workspace_id,
+			has_read_access,
 			has_write_access,
 			has_share_access,
 			has_delete_access
-		) VALUES (?, ?, ?, ?, ?);
+		) VALUES (?, ?, ?, ?, ?, ?);
 	`
 	WorkspaceUpdateQuery = `
 		UPDATE workspace SET name = ?, description = ? WHERE id = ?
@@ -176,9 +182,7 @@ const (
 	WorkspaceGetQuery = `
 		SELECT id, name, description FROM workspace WHERE id = ?
 	`
-	DeleteWorkspaceFromMapTable = `
-		DELETE FROM secret_workspace_map WHERE workspace_id = ?
-	`
+
 	DeleteWorkspaceFromWorkspaceTable = `
 		DELETE FROM workspace WHERE id = ?
 	`

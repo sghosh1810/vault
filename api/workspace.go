@@ -10,7 +10,6 @@ import (
 	"cozeva.com/vault/pkg/user"
 	sqlquery "cozeva.com/vault/sql"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 )
 
 func WorkspaceCreate(c *gin.Context) {
@@ -29,15 +28,15 @@ func WorkspaceCreate(c *gin.Context) {
 	if err := c.BindJSON(&newWorkspaceCreatePayload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
-			"message": "Missing required parameter: name",
+			"message": "Missing required parameter: name and description",
 		})
 		return
 	}
 
-	if newWorkspaceCreatePayload.WorkspaceDisplayName == "" {
+	if newWorkspaceCreatePayload.WorkspaceDisplayName == "" || newWorkspaceCreatePayload.WorkspaceDescription == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
-			"message": "Property name must be a valid string.",
+			"message": "Workspace name and description must be a valid string.",
 		})
 		return
 	}
@@ -61,7 +60,7 @@ func WorkspaceCreate(c *gin.Context) {
 		return
 	}
 
-	result, err := tx.Exec(sqlquery.WorkspaceInsertQuery, newWorkspaceCreatePayload.WorkspaceDisplayName, uuid.NewString())
+	result, err := tx.Exec(sqlquery.WorkspaceInsertQuery, newWorkspaceCreatePayload.WorkspaceDisplayName, newWorkspaceCreatePayload.WorkspaceDescription)
 
 	if err != nil {
 		tx.Rollback()
@@ -74,7 +73,7 @@ func WorkspaceCreate(c *gin.Context) {
 
 	workspaceId, _ := result.LastInsertId()
 
-	_, err = tx.Exec(sqlquery.InsertUserWorkspaceAccessQuery, currentUser.Uid, workspaceId, 1, 1, 1)
+	_, err = tx.Exec(sqlquery.InsertUserWorkspaceAccessQuery, currentUser.Uid, workspaceId, 1, 1, 1, 1)
 
 	if err != nil {
 		tx.Rollback()
@@ -117,15 +116,15 @@ func WorkspaceUpdate(c *gin.Context) {
 	if err := c.BindJSON(&newWorkspaceUpdatePayload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
-			"message": "Missing required parameter: name and id",
+			"message": "Missing required parameter: name, description and id",
 		})
 		return
 	}
 
-	if newWorkspaceUpdatePayload.WorkspaceDisplayName == "" || newWorkspaceUpdatePayload.WorkspaceID == 0 {
+	if newWorkspaceUpdatePayload.WorkspaceDisplayName == "" || newWorkspaceUpdatePayload.WorkspaceID == 0 || newWorkspaceUpdatePayload.WorkspaceDescription == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
-			"message": "Property name and id must be a valid string, integer respectively.",
+			"message": "Property name, description and id must be a valid string, string and integer respectively.",
 		})
 		return
 	}
@@ -135,7 +134,7 @@ func WorkspaceUpdate(c *gin.Context) {
 	if err != nil || !workspaceAccess.HasWriteAccess {
 		c.JSON(http.StatusForbidden, gin.H{
 			"status":  "fail",
-			"message": "Access denied to this resource",
+			"message": "Access denied to this workspace",
 		})
 		return
 	}
@@ -150,7 +149,7 @@ func WorkspaceUpdate(c *gin.Context) {
 	}
 	defer db.Close()
 
-	_, err = db.Exec(sqlquery.WorkspaceUpdateQuery, newWorkspaceUpdatePayload.WorkspaceDisplayName, newWorkspaceUpdatePayload.WorkspaceID)
+	_, err = db.Exec(sqlquery.WorkspaceUpdateQuery, newWorkspaceUpdatePayload.WorkspaceDisplayName, newWorkspaceUpdatePayload.WorkspaceDescription, newWorkspaceUpdatePayload.WorkspaceID)
 
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -193,7 +192,7 @@ func WorkspaceGet(c *gin.Context) {
 	if err != nil || !workspaceAccess.HasReadAccess {
 		c.JSON(http.StatusForbidden, gin.H{
 			"status":  "fail",
-			"message": "Access denied to this resource",
+			"message": "Access denied to this workspace",
 		})
 		return
 	}
@@ -225,17 +224,17 @@ func WorkspaceGet(c *gin.Context) {
 	for rows.Next() {
 		var id int
 		var name string
-		var uid string
+		var description string
 
-		err = rows.Scan(&id, &name, &uid)
+		err = rows.Scan(&id, &name, &description)
 		if err != nil {
 			log.Fatal(err)
 		}
 
 		workspaceDetails = append(workspaceDetails, map[string]any{
-			"id":   id,
-			"name": name,
-			"uid":  uid,
+			"id":          id,
+			"name":        name,
+			"description": description,
 		})
 	}
 
@@ -243,6 +242,14 @@ func WorkspaceGet(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "fail",
 			"message": "Failed to get workspace info for workspace with id " + workspaceId,
+		})
+		return
+	}
+
+	if len(workspaceDetails) == 0 {
+		c.JSON(http.StatusNotFound, gin.H{
+			"status":  "fail",
+			"message": "No workspace info found for workspace with id " + workspaceId,
 		})
 		return
 	}
@@ -288,7 +295,7 @@ func WorkspaceDelete(c *gin.Context) {
 	if err != nil || !workspaceAccess.HasDeleteAccess {
 		c.JSON(http.StatusForbidden, gin.H{
 			"status":  "fail",
-			"message": "Access denied to this resource",
+			"message": "Access denied to this workspace",
 		})
 		return
 	}
@@ -302,16 +309,6 @@ func WorkspaceDelete(c *gin.Context) {
 		return
 	}
 	defer db.Close()
-
-	//Delete related entries first if you have a `secret_workspace_map` table
-	_, err = db.Exec(sqlquery.DeleteWorkspaceFromMapTable, payload.WorkspaceID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"status":  "fail",
-			"message": "Failed to delete secret-workspace mappings.",
-		})
-		return
-	}
 
 	// Delete from workspaces table
 	result, err := db.Exec(sqlquery.DeleteWorkspaceFromWorkspaceTable, payload.WorkspaceID)
@@ -375,12 +372,15 @@ func ListWorkspaceByUser(c *gin.Context) {
 	for rows.Next() {
 		var id int
 		var name string
-		if err := rows.Scan(&id, &name); err != nil {
+		var description string
+
+		if err := rows.Scan(&id, &name, &description); err != nil {
 			log.Fatal(err)
 		}
 		workspaceList = append(workspaceList, map[string]any{
-			"id":   id,
-			"name": name,
+			"id":          id,
+			"name":        name,
+			"description": description,
 		})
 	}
 

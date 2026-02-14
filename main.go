@@ -58,6 +58,14 @@ func main() {
 
 	authGroup := router.Group(apiBasePath, middleware.CheckIP, middleware.CheckAuth)
 
+	crud.RegisterCRUDRoutes(authGroup, "workspace", map[string]gin.HandlerFunc{
+		"create": api.WorkspaceCreate,
+		"update": api.WorkspaceUpdate,
+		"delete": api.WorkspaceDelete,
+		"get":    api.WorkspaceGet,
+		"list":   api.ListWorkspaceByUser,
+	})
+
 	crud.RegisterCRUDRoutes(authGroup, "project", map[string]gin.HandlerFunc{
 		"create": api.ProjectCreate,
 		"update": api.ProjectUpdate,
