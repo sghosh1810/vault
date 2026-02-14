@@ -71,6 +71,7 @@ func main() {
 		"update": api.ProjectUpdate,
 		"delete": api.ProjectDelete,
 		"get":    api.ProjectGet,
+		"list":   api.ListProjectByWorkspace,
 	})
 
 	crud.RegisterCRUDRoutes(authGroup, "secret", map[string]gin.HandlerFunc{
@@ -81,8 +82,8 @@ func main() {
 	})
 
 	//route for user specific resource lists
-	authGroup.GET("/user/secret/list", api.ListSecretByUser)
-	authGroup.GET("/user/project/list", api.ListProjectByUser)
+	// authGroup.GET("/user/secret/list", api.ListSecretByUser)
+	// authGroup.GET("/user/project/list", api.ListProjectByUser)
 
 	//route  to map secret with a project
 	authGroup.POST("/operation/map", api.MapSecretToProject)

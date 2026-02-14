@@ -351,7 +351,7 @@ func ProjectDelete(c *gin.Context) {
 
 }
 
-func ListProjectByUser(c *gin.Context) {
+func ListProjectByWorkspace(c *gin.Context) {
 	workspaceId := c.Query("workspaceId")
 	currentUser, err := user.GetCurrentUser(c)
 
@@ -388,12 +388,15 @@ func ListProjectByUser(c *gin.Context) {
 	for rows.Next() {
 		var id int
 		var name string
-		if err := rows.Scan(&id, &name); err != nil {
+		var uid string
+
+		if err := rows.Scan(&id, &name, &uid); err != nil {
 			log.Fatal(err)
 		}
 		projectList = append(projectList, map[string]any{
 			"id":   id,
 			"name": name,
+			"uid":  uid,
 		})
 	}
 

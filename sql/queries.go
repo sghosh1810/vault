@@ -26,7 +26,7 @@ const (
 		) VALUES (?, ?, ?, ?, ?);
 	`
 	ListAllProjectByUser = `
-		SELECT p.id,p.name
+		SELECT p.id,p.name,p.uid
 		FROM project p
 		JOIN workspace_project_access wpa ON p.id = wpa.project_id
 		JOIN user_workspace_access uwa ON wpa.workspace_id = uwa.id
