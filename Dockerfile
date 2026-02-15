@@ -2,7 +2,6 @@
 FROM golang:1.24.5-bookworm
 ENV CGO_ENABLED=1
 ENV GOOS=linux
-ENV GOARCH=amd64
 
 WORKDIR /app
 COPY . .
