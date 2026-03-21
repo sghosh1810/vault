@@ -199,12 +199,31 @@ func UserSignin(c *gin.Context) {
 		})
 		return
 	}
+	cookiesMaxAge, _ := time.ParseDuration(os.Getenv("cookies.maxage"))
+	cookiesMaxAgeInSeconds := int(cookiesMaxAge.Seconds())
+	c.SetCookie(
+		"refreshToken",
+		refreshToken,
+		cookiesMaxAgeInSeconds,      // maxAge
+		"/",                         // path
+		os.Getenv("cookies.domain"), // domain (change in prod)
+		false,                       // secure (true in prod HTTPS)
+		true,                        // HttpOnly
+	)
+	c.SetCookie(
+		"sessionId",
+		sessionId,
+		cookiesMaxAgeInSeconds,      // maxAge
+		"/",                         // path
+		os.Getenv("cookies.domain"), // domain (change in prod)
+		false,                       // secure (true in prod HTTPS)
+		true,                        // HttpOnly
+	)
 
 	c.JSON(http.StatusOK, gin.H{
-		"status":        "success",
-		"message":       "Logged in successfully",
-		"access_token":  jwtToken,
-		"refresh_token": refreshToken,
+		"status":       "success",
+		"message":      "Logged in successfully",
+		"access_token": jwtToken,
 	})
 
 }
@@ -246,21 +265,14 @@ func UserLogout(c *gin.Context) {
 }
 
 func RefreshTokenHandler(c *gin.Context) {
-	var newRefreshTokenHandlerPayload interfaces.RefreshTokenHandlerPayload
-	if err := c.BindJSON(&newRefreshTokenHandlerPayload); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "fail",
-			"message": "Missing required credentials",
-		})
+	refreshToken, err := c.Cookie("refreshToken")
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "No refresh token"})
 		return
 	}
-
-	currentUser, err := user.GetCurrentUser(c)
+	sessionId, err := c.Cookie("sessionId")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "fail",
-			"message": "Failed to parse current user info.",
-		})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "No session ID"})
 		return
 	}
 
@@ -274,9 +286,9 @@ func RefreshTokenHandler(c *gin.Context) {
 	}
 	defer db.Close()
 
-	row := db.QueryRow(sqlquery.SelectUserSessionQuery, currentUser.Uid, currentUser.SessionID)
+	row := db.QueryRow(sqlquery.SelectUserSessionQuery, sessionId)
 	var refreshTokenInfo interfaces.UserRefreshTokenInfo
-	dbErr := row.Scan(&refreshTokenInfo.ID, &refreshTokenInfo.RefreshTokenHash, &refreshTokenInfo.RefreshTokenExpiry)
+	dbErr := row.Scan(&refreshTokenInfo.ID, &refreshTokenInfo.UserID, &refreshTokenInfo.RefreshTokenHash, &refreshTokenInfo.RefreshTokenExpiry)
 	if dbErr != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"status":  "fail",
@@ -293,7 +305,7 @@ func RefreshTokenHandler(c *gin.Context) {
 		return
 	}
 	// Check if refresh token is valid
-	hash, _ := security.CompareHash(newRefreshTokenHandlerPayload.RefreshToken, refreshTokenInfo.RefreshTokenHash)
+	hash, _ := security.CompareHash(refreshToken, refreshTokenInfo.RefreshTokenHash)
 	if !hash {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"status":  "fail",
@@ -312,7 +324,7 @@ func RefreshTokenHandler(c *gin.Context) {
 		return
 	}
 	newSessionId := uuid.New().String() // Generate new session
-	jwtToken, err := security.GenerateJWT(currentUser.Uid, newSessionId, jwtTokenTTL)
+	jwtToken, err := security.GenerateJWT(refreshTokenInfo.UserID, newSessionId, jwtTokenTTL)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"status":  "fail",
@@ -321,11 +333,12 @@ func RefreshTokenHandler(c *gin.Context) {
 		return
 	}
 
-	// Refresh token will expire soon — generating new refresh token
+	// Refresh token will expire soon — generating new refresh token, when refresh token's exipry is less than or equal to access token expiry
 	timeLeft := time.Until(refreshTokenInfo.RefreshTokenExpiry)
 	formattedRefreshTokenExpiry := refreshTokenInfo.RefreshTokenExpiry.Format("2006-01-02 15:04:05")
 	if timeLeft <= jwtTokenTTL {
-		refreshTokenInfo.RefreshTokenHash, _ = security.GenerateHash(uuid.NewString())
+		refreshToken = uuid.NewString()
+		refreshTokenInfo.RefreshTokenHash, _ = security.GenerateHash(refreshToken)
 		newRefreshTokenTTL, _ := time.ParseDuration(os.Getenv("core.jwt.refresh.token.ttl"))
 		formattedRefreshTokenExpiry = time.Now().Add(newRefreshTokenTTL).UTC().Format("2006-01-02 15:04:05")
 	}
@@ -338,12 +351,31 @@ func RefreshTokenHandler(c *gin.Context) {
 		})
 		return
 	}
-
+	cookiesMaxAge, _ := time.ParseDuration(os.Getenv("cookies.maxage"))
+	cookiesMaxAgeInSeconds := int(cookiesMaxAge.Seconds())
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(
+		"refreshToken",
+		refreshToken,
+		cookiesMaxAgeInSeconds, // maxAge (7 days)
+		"/",                    // path
+		"",                     // domain (change in prod)
+		false,                  // secure (true in prod HTTPS)
+		true,                   // HttpOnly (VERY IMPORTANT)
+	)
+	c.SetCookie(
+		"sessionId",
+		newSessionId,
+		cookiesMaxAgeInSeconds,      // maxAge (7 days)
+		"/",                         // path
+		os.Getenv("cookies.domain"), // domain (change in prod)
+		false,                       // secure (true in prod HTTPS)
+		true,                        // HttpOnly (VERY IMPORTANT)
+	)
 	c.JSON(http.StatusOK, gin.H{
-		"status":        "success",
-		"message":       "New acess token generated",
-		"access_token":  jwtToken,
-		"refresh_token": newRefreshTokenHandlerPayload.RefreshToken,
+		"status":       "success",
+		"message":      "New access token generated",
+		"access_token": jwtToken,
 	})
 
 }

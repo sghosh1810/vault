@@ -5,12 +5,14 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"time"
 
 	"cozeva.com/vault/api"
 	"cozeva.com/vault/config"
 	"cozeva.com/vault/middleware"
 	"cozeva.com/vault/pkg/crud"
 	"cozeva.com/vault/pkg/eurekaclient"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 )
@@ -44,6 +46,23 @@ func main() {
 	}
 
 	router := gin.Default()
+
+	router.Use(cors.New(cors.Config{
+		AllowOrigins: []string{
+			os.Getenv("CORS_ALLOWED_ORIGIN"),
+		},
+		AllowMethods: []string{
+			"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS",
+		},
+		AllowHeaders: []string{
+			"Authorization", "Content-Type", "Origin",
+		},
+		ExposeHeaders: []string{
+			"Content-Length",
+		},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
 
 	//get version of api from config or default to v1
 	version := config.GetConfigValue("api.config.version")
@@ -89,13 +108,13 @@ func main() {
 
 	//routes for user logout and token refresh
 	authGroup.POST("/user/logout", api.UserLogout)
-	authGroup.POST("/auth/refresh", api.RefreshTokenHandler)
 
 	anonGroup := router.Group(apiBasePath, middleware.CheckIP)
 
 	//route for signup and signin
 	anonGroup.POST("/user/signup", api.UserSignup)
 	anonGroup.POST("/user/signin", api.UserSignin)
+	anonGroup.POST("/auth/refresh", api.RefreshTokenHandler)
 
 	router.Run(fmt.Sprintf(":%d", port))
 }
