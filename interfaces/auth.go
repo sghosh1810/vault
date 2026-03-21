@@ -12,11 +12,14 @@ type JwtClaims struct {
 	jwt.RegisteredClaims
 }
 
-type RefreshTokenHandlerPayload struct {
-	RefreshToken string `json:"refresh_token"`
-}
+//	type UserRefreshTokenInfo struct {
+//		ID                 int64     `json:"id"`
+//		RefreshTokenHash   string    `json:"refresh_token"`
+//		RefreshTokenExpiry time.Time `json:"refresh_token_expiry"`
+//	}
 type UserRefreshTokenInfo struct {
 	ID                 int64     `json:"id"`
+	UserID             int64     `json:"user_id"`
 	RefreshTokenHash   string    `json:"refresh_token"`
 	RefreshTokenExpiry time.Time `json:"refresh_token_expiry"`
 }

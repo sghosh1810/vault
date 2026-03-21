@@ -169,9 +169,9 @@ const (
         AND session_id = ?;
 	`
 	SelectUserSessionQuery = `
-		SELECT id, refresh_token_hash, refresh_token_expires_at
-		FROM user_sessions
-		WHERE user_id = ? AND session_id = ?;
+		SELECT id, user_id, refresh_token_hash, refresh_token_expires_at
+        FROM user_sessions
+        WHERE session_id = ?
 	`
 	UpdateUserSessionIDForUserQuery = `
 		UPDATE user_sessions SET session_id = ?, refresh_token_hash = ?, refresh_token_expires_at = ?, updated_at = ? WHERE id = ?;
